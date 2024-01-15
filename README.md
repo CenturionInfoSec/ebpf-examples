@@ -16,3 +16,7 @@ General syscall tracing tool.
 
 Hide the presence of `su` files from an application. Bypasses the root
 detection implemented by [UnCrackable-Level3.apk](https://github.com/OWASP/owasp-mstg/blob/master/Crackmes/Android/Level_03/UnCrackable-Level3.apk)
+
+video: https://www.youtube.com/watch?v=eRftIoVs_Q8
+
+[![CRESTCon Asia Presentation: 'EBPF - Android Reverse Engineering Superpowers' (Terry Chia, Centurion)](http://img.youtube.com/vi/eRftIoVs_Q8/0.jpg)](https://www.youtube.com/watch?v=eRftIoVs_Q8)
