@@ -1,0 +1,172 @@
+# Dependabot configuration - synced from CenturionInfoSec/infrastructure-prod
+# To customize: create .github/SKIP_DEPENDABOT_SYNC and use your own config
+# Docs: https://github.com/CenturionInfoSec/infrastructure-prod/tree/main/dependabot-sync
+#
+# Dependabot silently skips ecosystems with no matching manifests in the repo.
+
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Python via uv (pyproject.toml + uv.lock — preferred for uv-managed projects)
+  - package-ecosystem: "uv"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      uv-deps:
+        patterns: ["*"]
+
+  # Python via pip (requirements.txt, Pipfile, setup.py — for non-uv projects)
+  - package-ecosystem: "pip"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      python-deps:
+        patterns: ["*"]
+
+  # Node.js (package.json)
+  - package-ecosystem: "npm"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      npm-deps:
+        patterns: ["*"]
+
+  # Docker (Dockerfile)
+  - package-ecosystem: "docker"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      docker-deps:
+        patterns: ["*"]
+
+  # Go (go.mod)
+  - package-ecosystem: "gomod"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      go-deps:
+        patterns: ["*"]
+
+  # Rust (Cargo.toml)
+  - package-ecosystem: "cargo"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      cargo-deps:
+        patterns: ["*"]
+
+  # Ruby (Gemfile)
+  - package-ecosystem: "bundler"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      bundler-deps:
+        patterns: ["*"]
+
+  # Java/Kotlin (pom.xml)
+  - package-ecosystem: "maven"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      maven-deps:
+        patterns: ["*"]
+
+  # Java/Kotlin (build.gradle)
+  - package-ecosystem: "gradle"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      gradle-deps:
+        patterns: ["*"]
+
+  # .NET (*.csproj, *.fsproj)
+  - package-ecosystem: "nuget"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      nuget-deps:
+        patterns: ["*"]
+
+  # PHP (composer.json)
+  - package-ecosystem: "composer"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      composer-deps:
+        patterns: ["*"]
+
+  # Terraform (*.tf)
+  - package-ecosystem: "terraform"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      terraform-deps:
+        patterns: ["*"]
+
+  # Dart/Flutter (pubspec.yaml)
+  - package-ecosystem: "pub"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      pub-deps:
+        patterns: ["*"]
+
+  # Elixir (mix.exs)
+  - package-ecosystem: "hex"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    groups:
+      hex-deps:
+        patterns: ["*"]

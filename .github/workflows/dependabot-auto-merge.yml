@@ -1,0 +1,92 @@
+# Auto-merge Dependabot PRs - synced from CenturionInfoSec/infrastructure-prod
+# Do not edit directly. To customize, create .github/SKIP_DEPENDABOT_SYNC
+#
+# This workflow EVALUATES auto-merge rules and adds an approval label.
+# Actual merging is done by the centralized processor in infrastructure-prod
+# (which holds the bot token and can bypass CODEOWNERS).
+#
+# SECURITY: Two layers of identity verification:
+#   1. Here: github.actor check + user.id verification (prevents label on non-Dependabot PRs)
+#   2. Processor: API-level user.login + user.id dual check (prevents merge of spoofed PRs)
+
+name: Dependabot Auto-Merge Evaluator
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Verify Dependabot identity
+        env:
+          PR_USER_ID: ${{ github.event.pull_request.user.id }}
+          PR_USER_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          # Dependabot's verified identity — GitHub-managed, cannot be spoofed via API
+          EXPECTED_LOGIN="dependabot[bot]"
+          EXPECTED_USER_ID="49699333"
+
+          if [ "$PR_USER_LOGIN" != "$EXPECTED_LOGIN" ] || [ "$PR_USER_ID" != "$EXPECTED_USER_ID" ]; then
+            echo "::error::Identity mismatch: expected $EXPECTED_LOGIN (ID $EXPECTED_USER_ID), got $PR_USER_LOGIN (ID $PR_USER_ID)"
+            exit 1
+          fi
+          echo "✅ Verified: $PR_USER_LOGIN (ID $PR_USER_ID)"
+
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
+
+      - name: Evaluate auto-merge rules
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEP_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          SEVERITY: ${{ steps.metadata.outputs.alert-severity }}
+        run: |
+          echo "Update type: $UPDATE_TYPE"
+          echo "Dependency type: $DEP_TYPE"
+          echo "Ecosystem: $ECOSYSTEM"
+          echo "Security severity: $SEVERITY"
+
+          SHOULD_MERGE=false
+          REASON=""
+
+          # Security updates - always merge
+          if [ -n "$SEVERITY" ]; then
+            SHOULD_MERGE=true
+            REASON="security update (severity: $SEVERITY)"
+
+          # Patch updates - always merge
+          elif [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
+            SHOULD_MERGE=true
+            REASON="patch version update"
+
+          # GitHub Actions - always merge
+          elif [ "$ECOSYSTEM" = "github_actions" ]; then
+            SHOULD_MERGE=true
+            REASON="GitHub Actions update"
+
+          # Minor dev dependencies - merge
+          elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ] && [ "$DEP_TYPE" = "direct:development" ]; then
+            SHOULD_MERGE=true
+            REASON="minor dev dependency update"
+
+          fi
+
+          if [ "$SHOULD_MERGE" = "true" ]; then
+            echo "✅ Approved for auto-merge: $REASON"
+            gh pr edit "$PR_URL" --add-label "dependabot-auto-merge-approved"
+          else
+            echo "⏸️  Requires manual review - not approved for auto-merge"
+            echo "   Update type: $UPDATE_TYPE"
+            echo "   Dependency type: $DEP_TYPE"
+          fi
