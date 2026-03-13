@@ -75,10 +75,10 @@ jobs:
             SHOULD_MERGE=true
             REASON="GitHub Actions update"
 
-          # Minor dev dependencies - merge
-          elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ] && [ "$DEP_TYPE" = "direct:development" ]; then
+          # Minor dependencies (dev or production) - merge
+          elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
             SHOULD_MERGE=true
-            REASON="minor dev dependency update"
+            REASON="minor dependency update ($DEP_TYPE)"
 
           fi
 
