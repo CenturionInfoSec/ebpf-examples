@@ -8,11 +8,16 @@
 # SECURITY: Two layers of identity verification:
 #   1. Here: github.actor check + user.id verification (prevents label on non-Dependabot PRs)
 #   2. Processor: API-level user.login + user.id dual check (prevents merge of spoofed PRs)
+#
+# NOTE: Uses pull_request_target (not pull_request) because Dependabot PRs
+# get a READ-ONLY GITHUB_TOKEN with pull_request events. pull_request_target
+# runs in the base branch context and gets write permissions. This is safe
+# because we never checkout untrusted PR code — only read metadata and add labels.
 
 name: Dependabot Auto-Merge Evaluator
 
 on:
-  pull_request:
+  pull_request_target:
 
 permissions:
   contents: read
@@ -57,36 +62,27 @@ jobs:
           echo "Ecosystem: $ECOSYSTEM"
           echo "Security severity: $SEVERITY"
 
-          SHOULD_MERGE=false
-          REASON=""
+          # Deny-list approach: auto-merge everything EXCEPT major direct production deps.
+          # This handles indirect/transitive deps (empty UPDATE_TYPE) and all ecosystems.
+          SHOULD_MERGE=true
+          REASON="dependency update"
 
-          # Security updates - always merge
+          if [ "$UPDATE_TYPE" = "version-update:semver-major" ] && [ "$DEP_TYPE" = "direct:production" ]; then
+            SHOULD_MERGE=false
+            REASON="major production dependency — requires manual review"
+          fi
+
+          # Override: always merge security updates regardless of version
           if [ -n "$SEVERITY" ]; then
             SHOULD_MERGE=true
             REASON="security update (severity: $SEVERITY)"
-
-          # Patch updates - always merge
-          elif [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
-            SHOULD_MERGE=true
-            REASON="patch version update"
-
-          # GitHub Actions - always merge
-          elif [ "$ECOSYSTEM" = "github_actions" ]; then
-            SHOULD_MERGE=true
-            REASON="GitHub Actions update"
-
-          # Minor dependencies (dev or production) - merge
-          elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
-            SHOULD_MERGE=true
-            REASON="minor dependency update ($DEP_TYPE)"
-
           fi
 
           if [ "$SHOULD_MERGE" = "true" ]; then
             echo "✅ Approved for auto-merge: $REASON"
             gh pr edit "$PR_URL" --add-label "dependabot-auto-merge-approved"
           else
-            echo "⏸️  Requires manual review - not approved for auto-merge"
+            echo "⏸️  $REASON"
             echo "   Update type: $UPDATE_TYPE"
             echo "   Dependency type: $DEP_TYPE"
           fi
