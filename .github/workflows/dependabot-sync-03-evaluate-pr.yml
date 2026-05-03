@@ -14,7 +14,7 @@
 # runs in the base branch context and gets write permissions. This is safe
 # because we never checkout untrusted PR code — only read metadata and add labels.
 
-name: Dependabot Auto-Merge Evaluator
+name: dependabot-sync-03-evaluate-pr
 
 on:
   pull_request_target:
