@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 jobs:
@@ -52,15 +53,20 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPROVAL_LABEL: dependabot-auto-merge-approved
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
           DEP_TYPE: ${{ steps.metadata.outputs.dependency-type }}
           ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
-          SEVERITY: ${{ steps.metadata.outputs.alert-severity }}
+          ALERT_STATE: ${{ steps.metadata.outputs.alert-state }}
+          GHSA_ID: ${{ steps.metadata.outputs.ghsa-id }}
+          CVSS: ${{ steps.metadata.outputs.cvss }}
         run: |
           echo "Update type: $UPDATE_TYPE"
           echo "Dependency type: $DEP_TYPE"
           echo "Ecosystem: $ECOSYSTEM"
-          echo "Security severity: $SEVERITY"
+          echo "Security alert state: $ALERT_STATE"
+          echo "GHSA ID: $GHSA_ID"
+          echo "CVSS: $CVSS"
 
           # Deny-list approach: auto-merge everything EXCEPT major direct production deps.
           # This handles indirect/transitive deps (empty UPDATE_TYPE) and all ecosystems.
@@ -72,15 +78,21 @@ jobs:
             REASON="major production dependency — requires manual review"
           fi
 
-          # Override: always merge security updates regardless of version
-          if [ -n "$SEVERITY" ]; then
+          # Override: always merge security updates regardless of version.
+          if [ -n "$GHSA_ID" ]; then
             SHOULD_MERGE=true
-            REASON="security update (severity: $SEVERITY)"
+            REASON="security update ($GHSA_ID, CVSS: $CVSS)"
           fi
 
           if [ "$SHOULD_MERGE" = "true" ]; then
             echo "✅ Approved for auto-merge: $REASON"
-            gh pr edit "$PR_URL" --add-label "dependabot-auto-merge-approved"
+            if ! gh label view "$APPROVAL_LABEL" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh label create "$APPROVAL_LABEL" \
+                --repo "$GITHUB_REPOSITORY" \
+                --description "Approved for centralized Dependabot auto-merge" \
+                --color "0e8a16"
+            fi
+            gh pr edit "$PR_URL" --add-label "$APPROVAL_LABEL"
           else
             echo "⏸️  $REASON"
             echo "   Update type: $UPDATE_TYPE"
