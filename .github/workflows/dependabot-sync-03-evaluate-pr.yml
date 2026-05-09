@@ -86,12 +86,14 @@ jobs:
 
           if [ "$SHOULD_MERGE" = "true" ]; then
             echo "✅ Approved for auto-merge: $REASON"
-            if ! gh label view "$APPROVAL_LABEL" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              gh label create "$APPROVAL_LABEL" \
-                --repo "$GITHUB_REPOSITORY" \
-                --description "Approved for centralized Dependabot auto-merge" \
-                --color "0e8a16"
-            fi
+            # --force makes this idempotent: creates the label if missing, otherwise
+            # updates color/description. Avoids the previous `gh label view` check,
+            # which always failed because `view` is not a valid `gh label` subcommand.
+            gh label create "$APPROVAL_LABEL" \
+              --repo "$GITHUB_REPOSITORY" \
+              --description "Approved for centralized Dependabot auto-merge" \
+              --color "0e8a16" \
+              --force
             gh pr edit "$PR_URL" --add-label "$APPROVAL_LABEL"
           else
             echo "⏸️  $REASON"
