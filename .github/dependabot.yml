@@ -189,7 +189,7 @@ updates:
         patterns: ["*"]
 
   # Elixir (mix.exs)
-  - package-ecosystem: "hex"
+  - package-ecosystem: "mix"
     directories:
       - "/**"
     schedule:
@@ -198,5 +198,5 @@ updates:
       default-days: 28
     open-pull-requests-limit: 25
     groups:
-      hex-deps:
+      mix-deps:
         patterns: ["*"]
