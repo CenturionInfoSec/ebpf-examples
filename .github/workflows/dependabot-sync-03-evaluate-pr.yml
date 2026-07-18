@@ -1,5 +1,12 @@
 # Auto-merge Dependabot PRs - synced from CenturionInfoSec/infrastructure-prod
-# Do not edit directly. To customize, create .github/SKIP_DEPENDABOT_SYNC
+# In synced repos: do NOT edit directly — the org sync overwrites this file.
+# To keep a custom config, create .github/SKIP_DEPENDABOT_SYNC instead.
+# In infrastructure-prod: this live copy IS the org-wide template — edit it
+# here (single-sourced so Dependabot's github-actions updates keep the pinned
+# SHAs current here and downstream in lockstep; a separate template copy used
+# to drift).
+# Config-only syncs of this file are pushed with [skip ci] and do not
+# trigger downstream rebuilds, releases, or deploys (infrastructure-prod #92).
 #
 # This workflow EVALUATES auto-merge rules and adds an approval label.
 # Actual merging is done by the centralized processor in infrastructure-prod
@@ -24,10 +31,26 @@ permissions:
   issues: write
   pull-requests: write
 
+# One evaluation per PR at a time, and cancel a superseded run: Dependabot can
+# push a new head (rebase/force-push) while an older evaluation is mid-flight.
+# Without this, a slow run that classified an OLD head as safe could re-add the
+# approval label AFTER a newer run removed it for an unsafe head — and the
+# processor would merge the latest head on that stale label. Cancelling the
+# in-flight run makes the newest evaluation the single source of truth.
+concurrency:
+  group: dependabot-evaluate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   evaluate:
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    # Gate on the PR AUTHOR, not the actor, so this job also runs when a
+    # MAINTAINER reopens or pushes to a Dependabot-authored PR. In that case the
+    # actor isn't dependabot[bot], but the head changed and a stale approval
+    # label must still be cleared (the processor verifies author, not actor, so
+    # it would otherwise merge the maintainer's head on the old approval).
+    # Re-evaluation/re-approval below is separately gated on the Dependabot actor.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
 
     steps:
       - name: Verify Dependabot identity
@@ -45,11 +68,38 @@ jobs:
           fi
           echo "✅ Verified: $PR_USER_LOGIN (ID $PR_USER_ID)"
 
+      - name: Clear any prior approval label (fail closed before evaluating)
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPROVAL_LABEL: dependabot-auto-merge-approved
+        run: |
+          # Strip any existing approval BEFORE we classify anything, so a stale
+          # label can never outlive a re-evaluation. This covers: an earlier
+          # head that was approved and is now superseded; a label left by the
+          # old fail-open evaluator during rollout; and a run that dies before
+          # it can classify (e.g. the metadata step below failing) — the label
+          # is already gone, so nothing merges on it. The evaluate step re-adds
+          # the label only if THIS head is approved. A missing label is a no-op;
+          # a real lookup/removal failure fails the step (errexit) rather than
+          # silently leaving the label in place.
+          CURRENT_LABELS="$(gh pr view "$PR_URL" --json labels --jq '.labels[].name')"
+          if echo "$CURRENT_LABELS" | grep -qx "$APPROVAL_LABEL"; then
+            echo "Clearing prior approval label before re-evaluating"
+            gh pr edit "$PR_URL" --remove-label "$APPROVAL_LABEL"
+          fi
+
+      # Re-evaluation and re-approval run ONLY for Dependabot-triggered events.
+      # A maintainer pushing to a Dependabot PR reaches the clear-label step
+      # above (fail closed) but must not cause a re-approval of a head they may
+      # have altered — only Dependabot's own updates get re-classified here.
       - name: Fetch Dependabot metadata
         id: metadata
+        if: github.actor == 'dependabot[bot]'
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 
       - name: Evaluate auto-merge rules
+        if: github.actor == 'dependabot[bot]'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,20 +118,71 @@ jobs:
           echo "GHSA ID: $GHSA_ID"
           echo "CVSS: $CVSS"
 
-          # Deny-list approach: auto-merge everything EXCEPT major direct production deps.
-          # This handles indirect/transitive deps (empty UPDATE_TYPE) and all ecosystems.
-          SHOULD_MERGE=true
-          REASON="dependency update"
+          # Allow-list (fail CLOSED): auto-merge ONLY updates we can positively
+          # confirm are low-risk. Anything we cannot classify — including an
+          # empty/unknown UPDATE_TYPE — is left for manual review. We do NOT
+          # assume UPDATE_TYPE is always populated: fetch-metadata has returned
+          # it empty before (e.g. the commit-message/directory parse bug #339,
+          # fixed in the pinned v3.1.0), and depending on any given version being
+          # bug-free is exactly the fragility that caused the outage. So we fail
+          # closed on an empty value regardless of the cause.
+          #
+          # This reverses the previous deny-list, which started from
+          # SHOULD_MERGE=true and so auto-merged on an empty UPDATE_TYPE. On
+          # 2026-07-15 that let a MAJOR redis bump ride into production inside a
+          # grouped PR whose UPDATE_TYPE reached the evaluator empty, taking a
+          # dev env down.
+          SHOULD_MERGE=false
+          REASON="update not recognized as low-risk — requires manual review"
 
-          if [ "$UPDATE_TYPE" = "version-update:semver-major" ] && [ "$DEP_TYPE" = "direct:production" ]; then
-            SHOULD_MERGE=false
-            REASON="major production dependency — requires manual review"
-          fi
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor)
+              # Non-breaking by semver. Safe across dependency types.
+              SHOULD_MERGE=true
+              REASON="$UPDATE_TYPE"
+              ;;
+            version-update:semver-major)
+              # Major bumps can break. Auto-merge ONLY when the dependency type
+              # is positively known to be low blast-radius (dev-only or indirect).
+              # direct:production, an EMPTY dep-type, or any unrecognized value
+              # falls through to manual review — a grouped PR can report a major
+              # update-type with an empty dependency-type, and that must not
+              # slip through as "non-production".
+              case "$DEP_TYPE" in
+                direct:development|indirect)
+                  SHOULD_MERGE=true
+                  REASON="major $DEP_TYPE dependency"
+                  ;;
+                *)
+                  REASON="major dependency (${DEP_TYPE:-unknown type}) — requires manual review"
+                  ;;
+              esac
+              ;;
+            "")
+              REASON="update type unavailable (grouped/multi-directory PR?) — requires manual review"
+              ;;
+          esac
 
-          # Override: always merge security updates regardless of version.
+          # NOTE: GitHub Actions are treated like any other dependency here — a
+          # major action bump is direct:production and goes to manual review,
+          # while the common patch/minor action updates auto-merge above. We do
+          # NOT special-case the ecosystem to auto-merge major actions: a new
+          # major release can change the behavior of privileged workflows even
+          # when SHA-pinned, so a human confirms those.
+
+          # NOTE: security updates are NOT force-merged. GHSA_ID/CVSS/ALERT_STATE
+          # (populated only if a future centrally-tokened evaluator enables
+          # fetch-metadata `alert-lookup`) stay purely informational — logged
+          # above, never an override. A security fix flows through the same
+          # allow-list as any update: a patch/minor security bump auto-merges,
+          # and a MAJOR one to a direct production dep goes to manual review
+          # (the redis-style breakage risk applies to security majors too). The
+          # weekly health report (workflow 05) surfaces any unmerged security
+          # alert so it never sits silently. This keeps one consistent fail-closed
+          # policy instead of a branch that would auto-merge major production
+          # security PRs the moment alert-lookup is switched on.
           if [ -n "$GHSA_ID" ]; then
-            SHOULD_MERGE=true
-            REASON="security update ($GHSA_ID, CVSS: $CVSS)"
+            echo "Security alert metadata present: $GHSA_ID (CVSS: $CVSS) — informational only"
           fi
 
           if [ "$SHOULD_MERGE" = "true" ]; then
@@ -99,4 +200,7 @@ jobs:
             echo "⏸️  $REASON"
             echo "   Update type: $UPDATE_TYPE"
             echo "   Dependency type: $DEP_TYPE"
+            # No label to remove here: the "Clear any prior approval label" step
+            # above already stripped it before evaluation, so a not-approved
+            # result simply leaves the PR unlabeled.
           fi
