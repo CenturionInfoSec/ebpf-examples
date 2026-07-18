@@ -2,7 +2,20 @@
 # To customize: create .github/SKIP_DEPENDABOT_SYNC and use your own config
 # Docs: https://github.com/CenturionInfoSec/infrastructure-prod/tree/main/dependabot-sync
 #
-# Dependabot silently skips ecosystems with no matching manifests in the repo.
+# Dependabot silently skips ecosystems with no matching manifests in the repo,
+# so it is safe to list every ecosystem everywhere. The one exception is the
+# pip/uv overlap: a uv-managed project has a pyproject.toml, which the pip
+# ecosystem also claims — but pip never regenerates uv.lock, so it would leave
+# the lockfile drifted. To prevent that, the sync GENERATES the pip block below
+# per-repo: it replaces pip's `directories` with only the repo's genuine (non-uv)
+# pip projects, and removes the pip block entirely from a pure-uv repo. (An
+# earlier version used pip `exclude-paths`, but Dependabot ignores exclude-paths
+# when the block scans `directories: ["/**"]`.)
+#
+# Every group is restricted to `update-types: ["minor", "patch"]`. Major bumps
+# leave the group and arrive as individual PRs so their metadata is unambiguous
+# and they get isolated review — the auto-merge evaluator holds major direct
+# production dependencies for a human (see dependabot-sync-03-evaluate-pr.yml).
 
 version: 2
 updates:
@@ -17,6 +30,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       github-actions:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Python via uv (pyproject.toml + uv.lock — preferred for uv-managed projects)
@@ -30,19 +44,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       uv-deps:
-        patterns: ["*"]
-
-  # Python via pip (requirements.txt, Pipfile, setup.py — for non-uv projects)
-  - package-ecosystem: "pip"
-    directories:
-      - "/**"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 28
-    open-pull-requests-limit: 25
-    groups:
-      python-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Node.js (package.json)
@@ -56,6 +58,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       npm-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Docker (Dockerfile)
@@ -69,6 +72,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       docker-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Go (go.mod)
@@ -82,6 +86,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       go-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Rust (Cargo.toml)
@@ -95,6 +100,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       cargo-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Ruby (Gemfile)
@@ -108,6 +114,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       bundler-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Java/Kotlin (pom.xml)
@@ -121,6 +128,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       maven-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Java/Kotlin (build.gradle)
@@ -134,6 +142,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       gradle-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # .NET (*.csproj, *.fsproj)
@@ -147,6 +156,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       nuget-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # PHP (composer.json)
@@ -160,6 +170,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       composer-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Terraform (*.tf)
@@ -173,6 +184,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       terraform-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Dart/Flutter (pubspec.yaml)
@@ -186,6 +198,7 @@ updates:
     open-pull-requests-limit: 25
     groups:
       pub-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
 
   # Elixir (mix.exs)
@@ -199,4 +212,5 @@ updates:
     open-pull-requests-limit: 25
     groups:
       mix-deps:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
